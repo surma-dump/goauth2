@@ -39,9 +39,12 @@ package oauth
 
 import (
 	"encoding/json"
+	"fmt"
+	"io/ioutil"
 	"net/http"
 	"net/url"
 	"os"
+	"strings"
 	"time"
 )
 
@@ -90,7 +93,7 @@ func (f CacheFile) PutToken(tok *Token) error {
 type Config struct {
 	ClientId     string
 	ClientSecret string
-	Scope	string
+	Scope        string
 	AuthURL      string
 	TokenURL     string
 	RedirectURL  string // Defaults to out-of-band mode if empty.
@@ -172,8 +175,8 @@ func (c *Config) AuthCodeURL(state string) string {
 		"response_type":   {"code"},
 		"client_id":       {c.ClientId},
 		"redirect_uri":    {c.redirectURL()},
-		"scope":	   {c.Scope},
-		"state":	   {state},
+		"scope":           {c.Scope},
+		"state":           {state},
 		"access_type":     {c.AccessType},
 		"approval_prompt": {c.ApprovalPrompt},
 	}.Encode()
@@ -205,8 +208,8 @@ func (t *Transport) Exchange(code string) (*Token, error) {
 	err := t.updateToken(tok, url.Values{
 		"grant_type":   {"authorization_code"},
 		"redirect_uri": {t.redirectURL()},
-		"scope":	{t.Scope},
-		"code":	 {code},
+		"scope":        {t.Scope},
+		"code":         {code},
 	})
 	if err != nil {
 		return nil, err
@@ -286,12 +289,34 @@ func (t *Transport) updateToken(tok *Token, v url.Values) error {
 		return OAuthError{"updateToken", r.Status}
 	}
 	var b struct {
-		Access    string	`json:"access_token"`
-		Refresh   string	`json:"refresh_token"`
+		Access    string        `json:"access_token"`
+		Refresh   string        `json:"refresh_token"`
 		ExpiresIn time.Duration `json:"expires_in"`
 	}
-	if err = json.NewDecoder(r.Body).Decode(&b); err != nil {
-		return err
+
+	content := strings.Split(r.Header.Get("Content-Type"), ";")
+	if len(content) <= 0 {
+		content = []string{"application/x-www-form-urlencoded"}
+	}
+	switch content[0] {
+	case "application/x-www-form-urlencoded":
+		body, err := ioutil.ReadAll(r.Body)
+		if err != nil {
+			return err
+		}
+		vals, err := url.ParseQuery(string(body))
+		if err != nil {
+			return err
+		}
+
+		b.Access = vals.Get("access_token")
+		b.ExpiresIn, _ = time.ParseDuration(vals.Get("expires") + "ns")
+	case "application/json":
+		if err = json.NewDecoder(r.Body).Decode(&b); err != nil {
+			return err
+		}
+	default:
+		return OAuthError{"updateToken", fmt.Sprintf("Unknown content type: %s", r.Header.Get("Content-Type"))}
 	}
 	tok.AccessToken = b.Access
 	// Don't overwrite `RefreshToken` with an empty value

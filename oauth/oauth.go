@@ -252,7 +252,7 @@ func (t *Transport) RoundTrip(req *http.Request) (*http.Response, error) {
 	}
 
 	// Make the HTTP request.
-	req.Header.Set("Authorization", "OAuth "+t.AccessToken)
+	req.Header.Add("Authorization", "Bearer "+t.AccessToken)
 	return t.transport().RoundTrip(req)
 }
 

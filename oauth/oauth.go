@@ -7,39 +7,38 @@
 //
 // Example usage:
 //
-//      // Specify your configuration. (typically as a global variable)
-//      var config = &oauth.Config{
-//	      ClientId:     YOUR_CLIENT_ID,
-//	      ClientSecret: YOUR_CLIENT_SECRET,
-//	      Scope:	"https://www.googleapis.com/auth/buzz",
-//	      AuthURL:      "https://accounts.google.com/o/oauth2/auth",
-//	      TokenURL:     "https://accounts.google.com/o/oauth2/token",
-//	      RedirectURL:  "http://you.example.org/handler",
-//      }
+//	// Specify your configuration. (typically as a global variable)
+//	var config = &oauth.Config{
+//		ClientId:     YOUR_CLIENT_ID,
+//		ClientSecret: YOUR_CLIENT_SECRET,
+//		Scope:        "https://www.googleapis.com/auth/buzz",
+//		AuthURL:      "https://accounts.google.com/o/oauth2/auth",
+//		TokenURL:     "https://accounts.google.com/o/oauth2/token",
+//		RedirectURL:  "http://you.example.org/handler",
+//	}
 //
-//      // A landing page redirects to the OAuth provider to get the auth code.
-//      func landing(w http.ResponseWriter, r *http.Request) {
-//	      http.Redirect(w, r, config.AuthCodeURL("foo"), http.StatusFound)
-//      }
+//	// A landing page redirects to the OAuth provider to get the auth code.
+//	func landing(w http.ResponseWriter, r *http.Request) {
+//		http.Redirect(w, r, config.AuthCodeURL("foo"), http.StatusFound)
+//	}
 //
-//      // The user will be redirected back to this handler, that takes the
-//      // "code" query parameter and Exchanges it for an access token.
-//      func handler(w http.ResponseWriter, r *http.Request) {
-//	      t := &oauth.Transport{Config: config}
-//	      t.Exchange(r.FormValue("code"))
-//	      // The Transport now has a valid Token. Create an *http.Client
-//	      // with which we can make authenticated API requests.
-//	      c := t.Client()
-//	      c.Post(...)
-//	      // ...
-//	      // btw, r.FormValue("state") == "foo"
-//      }
+//	// The user will be redirected back to this handler, that takes the
+//	// "code" query parameter and Exchanges it for an access token.
+//	func handler(w http.ResponseWriter, r *http.Request) {
+//		t := &oauth.Transport{Config: config}
+//		t.Exchange(r.FormValue("code"))
+//		// The Transport now has a valid Token. Create an *http.Client
+//		// with which we can make authenticated API requests.
+//		c := t.Client()
+//		c.Post(...)
+//		// ...
+//		// btw, r.FormValue("state") == "foo"
+//	}
 //
 package oauth
 
 import (
 	"encoding/json"
-	"fmt"
 	"io/ioutil"
 	"net/http"
 	"net/url"
@@ -135,10 +134,10 @@ func (t *Token) Expired() bool {
 // Transport implements http.RoundTripper. When configured with a valid
 // Config and Token it can be used to make authenticated HTTP requests.
 //
-//      t := &oauth.Transport{config}
+//	t := &oauth.Transport{config}
 //      t.Exchange(code)
 //      // t now contains a valid Token
-//      r, _, err := t.Client().Get("http://example.org/url/requiring/auth")
+//	r, _, err := t.Client().Get("http://example.org/url/requiring/auth")
 //
 // It will automatically refresh the Token if it can,
 // updating the supplied Token in place.
@@ -252,7 +251,7 @@ func (t *Transport) RoundTrip(req *http.Request) (*http.Response, error) {
 	}
 
 	// Make the HTTP request.
-	req.Header.Add("Authorization", "Bearer "+t.AccessToken)
+	req.Header.Set("Authorization", "Bearer "+t.AccessToken)
 	return t.transport().RoundTrip(req)
 }
 
@@ -295,11 +294,8 @@ func (t *Transport) updateToken(tok *Token, v url.Values) error {
 	}
 
 	content := strings.Split(r.Header.Get("Content-Type"), ";")
-	if len(content) <= 0 {
-		content = []string{"application/x-www-form-urlencoded"}
-	}
 	switch content[0] {
-	case "application/x-www-form-urlencoded":
+	case "application/x-www-form-urlencoded", "text/plain":
 		body, err := ioutil.ReadAll(r.Body)
 		if err != nil {
 			return err
@@ -310,13 +306,11 @@ func (t *Transport) updateToken(tok *Token, v url.Values) error {
 		}
 
 		b.Access = vals.Get("access_token")
-		b.ExpiresIn, _ = time.ParseDuration(vals.Get("expires") + "ns")
-	case "application/json":
+		b.ExpiresIn, _ = time.ParseDuration(vals.Get("expires") + "s")
+	default:
 		if err = json.NewDecoder(r.Body).Decode(&b); err != nil {
 			return err
 		}
-	default:
-		return OAuthError{"updateToken", fmt.Sprintf("Unknown content type: %s", r.Header.Get("Content-Type"))}
 	}
 	tok.AccessToken = b.Access
 	// Don't overwrite `RefreshToken` with an empty value
